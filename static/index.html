@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebP Converter</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
+    --border: #e2e5ea; --accent: #2563eb; --accent-soft: #e8efff;
+    --ok: #15803d; --err: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad;
+      --border: #2c323d; --accent: #60a5fa; --accent-soft: #1e2a3f;
+      --ok: #4ade80; --err: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+
+  #drop { border: 2px dashed var(--border); border-radius: 12px; padding: 40px 16px; text-align: center;
+          cursor: pointer; transition: .15s; background: var(--card); margin-bottom: 16px; }
+  #drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  #drop strong { display: block; font-size: 17px; margin-bottom: 4px; }
+  #drop span { color: var(--muted); font-size: 13px; }
+
+  .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; align-items: end; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=number] { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+                       background: var(--bg); color: var(--text); font: inherit; }
+  .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin: 0; cursor: pointer; }
+  .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .summary { color: var(--muted); font-size: 14px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+           background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+  li:first-child { border-top: 0; }
+  .thumb { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: var(--bg); flex: none; }
+  .info { flex: 1; min-width: 0; }
+  .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .meta .ok { color: var(--ok); } .meta .err { color: var(--err); }
+  a.dl { color: var(--accent); text-decoration: none; font-size: 14px; flex: none; }
+  .empty { color: var(--muted); text-align: center; padding: 12px 0; }
+  .formats { font-size: 12px; color: var(--muted); margin-top: 12px; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebP Converter</h1>
+  <p class="sub">Ubah gambar format apa pun menjadi WebP. Semua proses berjalan di komputer kamu, tanpa internet.</p>
+
+  <div id="drop">
+    <strong>Seret &amp; lepas gambar di sini</strong>
+    <span>atau klik untuk memilih file / folder: JPG, PNG, GIF, BMP, TIFF, HEIC, AVIF, ICO, PSD, dan lainnya</span>
+    <input id="pick" type="file" multiple hidden>
+  </div>
+
+  <div class="card settings">
+    <div>
+      <label for="quality">Kualitas: <b id="qv">85</b></label>
+      <input id="quality" type="range" min="1" max="100" value="85">
+    </div>
+    <div>
+      <label for="maxsize">Sisi terpanjang maks. (px, opsional)</label>
+      <input id="maxsize" type="number" min="1" placeholder="ukuran asli">
+    </div>
+    <div>
+      <label class="check"><input id="lossless" type="checkbox"> Lossless (tanpa kehilangan kualitas)</label>
+      <label class="check" style="margin-top:8px"><input id="meta" type="checkbox" checked> Simpan metadata (EXIF / profil warna)</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="bar">
+      <div class="summary" id="summary">Belum ada file.</div>
+      <div style="display:flex;gap:8px">
+        <button id="clear">Bersihkan</button>
+        <button id="zip" class="primary" disabled>Unduh semua (ZIP)</button>
+      </div>
+    </div>
+    <ul id="list"><li class="empty">Hasil konversi akan muncul di sini.</li></ul>
+    <div class="formats" id="formats"></div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const drop = $("drop"), pick = $("pick"), list = $("list");
+const done = [];          // {name, in_size, out_size}
+let queue = [], active = 0, total = 0, failed = 0;
+const PARALLEL = 3;
+
+const kb = (b) => b < 1024 * 1024 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(2) + " MB";
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+$("quality").oninput = (e) => ($("qv").textContent = e.target.value);
+$("lossless").onchange = (e) => ($("quality").disabled = e.target.checked);
+
+fetch("/api/formats").then((r) => r.json()).then((f) => ($("formats").textContent = "Format yang didukung: " + f.join(" ")));
+
+drop.onclick = () => pick.click();
+pick.onchange = () => { addFiles([...pick.files]); pick.value = ""; };
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = async (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) addFiles((await Promise.all(entries.map(readEntry))).flat());
+  else addFiles([...e.dataTransfer.files]);
+};
+
+// Baca isi folder yang di-drop (rekursif)
+function readEntry(entry) {
+  if (entry.isFile) return new Promise((res) => entry.file((f) => res([f]), () => res([])));
+  const reader = entry.createReader();
+  return new Promise((res) => {
+    const all = [];
+    const next = () => reader.readEntries(async (batch) => {
+      if (!batch.length) return res((await Promise.all(all.map(readEntry))).flat());
+      all.push(...batch); next();
+    }, () => res([]));
+    next();
+  });
+}
+
+function addFiles(files) {
+  if (!files.length) return;
+  if (list.querySelector(".empty")) list.innerHTML = "";
+  for (const file of files) {
+    const li = document.createElement("li");
+    li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="name">${esc(file.name)}</div>
+      <div class="meta">Menunggu…</div></div>`;
+    list.appendChild(li);
+    queue.push({ file, li });
+    total++;
+  }
+  updateSummary();
+  pump();
+}
+
+function pump() {
+  while (active < PARALLEL && queue.length) {
+    active++;
+    convert(queue.shift()).finally(() => { active--; updateSummary(); pump(); });
+  }
+}
+
+async function convert({ file, li }) {
+  const meta = li.querySelector(".meta");
+  meta.textContent = "Mengonversi…";
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("quality", $("quality").value);
+  fd.append("lossless", $("lossless").checked);
+  fd.append("keep_metadata", $("meta").checked);
+  fd.append("max_size", $("maxsize").value);
+  try {
+    const r = await fetch("/api/convert", { method: "POST", body: fd });
+    const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(j.error);
+    done.push(j);
+    const pct = ((1 - j.out_size / j.in_size) * 100).toFixed(0);
+    li.querySelector(".thumb").src = j.url;
+    meta.innerHTML = `${kb(j.in_size)} → <b>${kb(j.out_size)}</b> <span class="ok">(${pct >= 0 ? "-" + pct : "+" + -pct}%)</span>`;
+    li.insertAdjacentHTML("beforeend", `<a class="dl" href="${j.url}?dl=1">Unduh</a>`);
+  } catch (err) {
+    failed++;
+    meta.innerHTML = `<span class="err">${esc(String(err.message || err))}</span>`;
+  }
+}
+
+function updateSummary() {
+  const ok = done.length, pending = total - ok - failed;
+  $("zip").disabled = ok === 0;
+  if (!total) return ($("summary").textContent = "Belum ada file.");
+  const tin = done.reduce((s, d) => s + d.in_size, 0), tout = done.reduce((s, d) => s + d.out_size, 0);
+  let t = `${ok} berhasil`;
+  if (failed) t += `, ${failed} gagal`;
+  if (pending) t += `, ${pending} diproses`;
+  if (ok) t += ` · ${kb(tin)} → ${kb(tout)} (hemat ${((1 - tout / tin) * 100).toFixed(1)}%)`;
+  $("summary").textContent = t;
+}
+
+$("zip").onclick = async () => {
+  const r = await fetch("/api/zip", { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ names: done.map((d) => d.name) }) });
+  if (!r.ok) return alert("Gagal membuat ZIP.");
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await r.blob()), download: "webp_images.zip" });
+  a.click(); URL.revokeObjectURL(a.href);
+};
+
+$("clear").onclick = () => {
+  if (active || queue.length) return;
+  done.length = 0; total = failed = 0;
+  list.innerHTML = '<li class="empty">Hasil konversi akan muncul di sini.</li>';
+  updateSummary();
+};
+</script>
+</body>
+</html>
